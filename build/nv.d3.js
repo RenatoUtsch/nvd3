@@ -1,4 +1,4 @@
-/* nvd3 version 1.8.3-dev (https://github.com/novus/nvd3) 2016-04-26 */
+/* nvd3 version 1.8.3-dev (https://github.com/novus/nvd3) 2016-05-21 */
 (function(){
 
 // set up main nv object
@@ -557,6 +557,27 @@ nv.models.tooltip = function() {
     ;
 
     /*
+     * If a parent of the container has a translate transformation, fix the positioning.
+     */
+    var fixTranslate = function(pos) {
+        var obj = chartContainer;
+
+        while(obj && obj.style) {
+            var style = getComputedStyle(obj);
+            if(style.transform != 'none') {
+                var match = style.transform.match(/^matrix\((.+)\)$/);
+                var split = match[1].split(', ');
+                pos.left -= match ? parseInt(split[4], 10) : 0;
+                pos.top -= match ? parseInt(split[5], 10) : 0;
+            }
+
+            obj = obj.parentNode;
+        }
+
+        return pos;
+    };
+
+    /*
      Function that returns the position (relative to the viewport) the tooltip should be placed in.
      Should return: {
         left: <leftPos>,
@@ -564,10 +585,10 @@ nv.models.tooltip = function() {
      }
      */
     var position = function() {
-        return {
+        return fixTranslate({
             left: d3.event !== null ? d3.event.clientX : 0,
             top: d3.event !== null ? d3.event.clientY : 0
-        };
+        });
     };
 
     // Format function for the tooltip values column.
@@ -9903,15 +9924,17 @@ nv.models.multiChart = function() {
                         });
                     });
 
+                    var defaultValueFormatter = function(d,i) {
+                        var yAxis = allData[i].yAxis;
+                        return d == null ? "N/A" : yAxis.tickFormat()(d);
+                    };
+
                     interactiveLayer.tooltip
                     .chartContainer(chart.container.parentNode)
                     .headerFormatter(function(d, i) {
                         return xAxis.tickFormat()(d, i);
                     })
-                    .valueFormatter(function(d,i) {
-                        var yAxis = allData[i].yAxis;
-                        return d === null ? "N/A" : yAxis.tickFormat()(d);
-                    })
+                    .valueFormatter(interactiveLayer.tooltip.valueFormatter() || defaultValueFormatter)
                     .data({
                         value: chart.x()( singlePoint,pointIndex ),
                         index: pointIndex,
@@ -12097,14 +12120,16 @@ nv.models.scatter = function() {
                             if (needsUpdate || !data[d.series]) return 0; //check if this is a dummy point
                             var series = data[d.series],
                                 point  = series.values[i];
-
+                            var element = this;
                             dispatch.elementClick({
                                 point: point,
                                 series: series,
                                 pos: [x(getX(point, i)) + margin.left, y(getY(point, i)) + margin.top], //TODO: make this pos base on the page
                                 relativePos: [x(getX(point, i)) + margin.left, y(getY(point, i)) + margin.top],
                                 seriesIndex: d.series,
-                                pointIndex: i
+                                pointIndex: i,
+                                event: d3.event,
+                                element: element
                             });
                         })
                         .on('dblclick', function(d,i) {
